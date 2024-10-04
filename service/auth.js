@@ -240,41 +240,6 @@ const setPassword = async (payload) => {
   }
 };
 
-const signIn = async (payload) => {
-  const { email, password } = payload;
-
-  try {
-    const response = await UserModel.findOne({
-      where: { email, user_type: USER_TYPE.CUSTOMER, is_deleted: false },
-      attributes: [ 'salt', 'hashed_password', [ 'public_id', 'user_id' ] ],
-    });
-
-    if (response) {
-      const { salt, hashed_password: hashedPassword, user_id: userId } = response.dataValues;
-
-      const inputHashedPassword = authentication.encryptPassword(password, salt);
-
-      if (inputHashedPassword !== hashedPassword) {
-        return {
-          errors: [ { name: 'password', message: 'Invalid password' } ],
-        };
-      }
-
-      const { accessToken, refreshToken } = authentication.generateToken(userId, email);
-
-      return {
-        doc: { accessToken, refreshToken, message: 'Login successful' },
-      };
-    }
-
-    return {
-      errors: [ { name: 'email', message: 'Email not registered' } ],
-    };
-  } catch (error) {
-    return { err: error.message };
-  }
-};
-
 module.exports = {
-  register, verification, setPassword, signIn,
+  register, verification, setPassword,
 };
