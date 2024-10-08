@@ -12,8 +12,25 @@ module.exports = {
     USER_EMAIL_REQUEST: 'USER_EMAIL_REQUEST',
   },
 
+  LOGIN_TYPE: {
+    MOBILE_NUMBER_OTP: 'MOBILE_NUMBER_OTP',
+    GOOGLE: 'GOOGLE',
+    APPLE: 'APPLE',
+    USER_NAME_PASSWORD: 'USER_NAME_PASSWORD',
+    CLIENT_ID_SECRET: 'CLIENT_ID_SECRET',
+  },
+
   USER_TYPE: {
     PLATFORM: 'PLATFORM',
     CUSTOMER: 'CUSTOMER',
   },
+
+  CUSTOMER_IGNORE_PATH: [ '/api/register', '/api/verification', '/api/set-password', '/api/login' ],
+
+  AUDIENCE_TYPE: {
+    PLATFORM: 'PLATFORM',
+    CUSTOMER: 'CUSTOMER',
+  },
+
+  ISSUER: 'AGILE WORLD TECHNOLOGIES',
 };

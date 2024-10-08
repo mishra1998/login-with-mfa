@@ -1,10 +1,16 @@
 const moment = require('moment');
 const { v1: uuidV1 } = require('uuid');
-const { user: UserModel, otp: OTPModel } = require('../models');
+const twoFactor = require('node-2fa');
+const {
+  user: UserModel, otp: OTPModel, sequelize,
+} = require('../models');
 const Helper = require('../utils/helper');
 const OtpService = require('../utils/otp');
-const { USER_TYPE, USER_STATUS, OTP_TYPE } = require('../utils/constant');
+const {
+  USER_TYPE, USER_STATUS, OTP_TYPE, LOGIN_TYPE,
+} = require('../utils/constant');
 const authentication = require('./authentication');
+const ErrorCode = require('../utils/error');
 
 const register = async (payload) => {
   const { email } = payload;
@@ -192,9 +198,7 @@ const verification = async (payload) => {
 };
 
 const setPassword = async (payload) => {
-  const {
-    email, password, name,
-  } = payload;
+  const { email, password, name } = payload;
 
   try {
     const where = { email, user_type: USER_TYPE.CUSTOMER };
@@ -240,6 +244,224 @@ const setPassword = async (payload) => {
   }
 };
 
+const login = async (payload) => {
+  const { email, password, totp } = payload;
+  const transaction = await sequelize.transaction();
+
+  try {
+    const response = await UserModel.findOne({
+      where:
+          {
+            email, user_type: USER_TYPE.CUSTOMER, is_email_verified: true,
+          },
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+      attributes: [ 'hashed_password', 'salt', 'email', [ 'public_id', 'user_id' ], 'user_type',
+        'is_email_verified', 'is_mobile_verified', 'mobile_number', 'system_generated_password',
+        'status', 'is_mfa_enabled', 'mfa_secret' ],
+    });
+
+    if (response) {
+      const doc = Helper.convertSnakeToCamel(response.dataValues);
+
+      const {
+        userId, status, hashedPassword, salt, systemGeneratedPassword, isMfaEnabled, mfaSecret, ...newDoc
+      } = doc;
+
+      if (status === USER_STATUS.ACTIVE) {
+        const isValidPassword = authentication.verifyPassword(hashedPassword, password, salt);
+
+        if (isValidPassword) {
+          if (systemGeneratedPassword) {
+            await transaction.rollback();
+
+            return {
+              errors: {
+                errorCode: ErrorCode['100'],
+                details: [ { name: 'isSystemGeneratedPassword', message: 'Invalid password! this password is system generated password' } ],
+              },
+            };
+          }
+
+          if (!isMfaEnabled) {
+            await transaction.rollback();
+
+            return {
+              errors: {
+                errorCode: ErrorCode['101'],
+                details: [ { name: 'isMfaEnabled', message: 'Mfa not enabled!' } ],
+              },
+            };
+          }
+
+          if (isMfaEnabled) {
+            if (!totp) {
+              await transaction.rollback();
+
+              return {
+                errors: {
+                  errorCode: ErrorCode['101'],
+                  details: [ { name: 'isMfaEnabled', message: 'Missing totp parameter!' } ],
+                },
+              };
+            }
+
+            const { delta } = twoFactor.verifyToken(mfaSecret, totp) || { delta: -2 };
+
+            if (delta === -2) {
+              await transaction.rollback();
+
+              return {
+                errors: {
+                  errorCode: ErrorCode['400'],
+                  details: [ { name: 'isMfaEnabled', message: 'invalid MFA code' } ],
+                },
+              };
+            }
+            if (delta === -1) {
+              await transaction.rollback();
+
+              return {
+                errors: {
+                  errorCode: ErrorCode['400'],
+                  details: [ { name: 'isMfaEnabled', message: 'invalid MFA code,too late' } ],
+                },
+              };
+            }
+            if (delta === 1) {
+              await transaction.rollback();
+
+              return {
+                errors: {
+                  errorCode: ErrorCode['400'],
+                  details: [ { name: 'isMfaEnabled', message: 'invalid MFA code,too early' } ],
+                },
+              };
+            }
+          }
+
+          await UserModel.update({ last_login_at: new Date() }, { where: { public_id: userId }, transaction });
+
+          const signedPayload = { ...newDoc, loginType: LOGIN_TYPE.USER_NAME_PASSWORD };
+
+          const { token, refreshToken, expiresIn } = await authentication.signToken(signedPayload);
+
+          await transaction.commit();
+
+          return {
+            doc: { token, expiresIn, refreshToken },
+          };
+        }
+        await transaction.rollback();
+
+        return {
+          errors: {
+            details: [ { name: 'password', message: 'invalid password.' } ],
+          },
+        };
+      }
+      await transaction.rollback();
+
+      return {
+        errors: {
+          errorCode: ErrorCode['400'],
+          details: [ { name: 'userName', message: 'user is not active' } ],
+        },
+      };
+    }
+    await transaction.rollback();
+
+    return {
+      errors: {
+        errorCode: ErrorCode['400'],
+        details: [ { name: 'userName', message: 'user is not registered' } ],
+      },
+    };
+  } catch (error) {
+    await transaction.rollback();
+
+    throw error;
+  }
+};
+
+const createMFA = async (payload) => {
+  const { userId } = payload;
+
+  const response = await UserModel.findOne({
+    where: { public_id: userId },
+    attributes: [ [ 'public_id', 'user_id' ], 'user_type',
+      [ 'is_mfa_enabled', 'isMfaEnabled' ], 'mfa_secret' ],
+  });
+
+  if (response) {
+    const { dataValues: { isMfaEnabled } } = response;
+
+    if (!isMfaEnabled) {
+      const { secret, uri, qr } = twoFactor.generateSecret({ name: 'agile', account: 'agile' });
+
+      return { doc: { uri, qr, secret } };
+    }
+
+    return { errors: [ { name: '2FA', message: '2fa is already enabled for the account!' } ] };
+  }
+
+  return { errors: [ { name: 'User', message: 'User does not exist!' } ] };
+};
+
+const verifyMFA = async (payload) => {
+  const { otp, secret, userId } = payload;
+  const transaction = await sequelize.transaction();
+
+  try {
+    const response = await UserModel.findOne({
+      where: { public_id: userId },
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
+
+    if (response) {
+      const verified = twoFactor.verifyToken(secret, otp);
+
+      if (verified) {
+        const { delta } = verified;
+
+        if (!delta) {
+          await UserModel.update(
+            {
+              is_mfa_enabled: true,
+              mfa_secret: secret,
+            },
+            {
+              where: { public_id: userId },
+              transaction,
+            },
+          );
+
+          await transaction.commit();
+
+          return { doc: { isVerified: true } };
+        }
+
+        await transaction.rollback();
+
+        return { doc: { isVerified: false } };
+      }
+
+      await transaction.rollback();
+
+      return { errors: [ { name: 'Otp', message: 'Otp is not correct!' } ] };
+    }
+
+    await transaction.rollback();
+
+    return { errors: [ { name: 'User', message: 'User does not exist!' } ] };
+  } catch (error) {
+    await transaction.rollback();
+
+    throw error;
+  }
+};
+
 module.exports = {
-  register, verification, setPassword,
+  register, verification, login, setPassword, createMFA, verifyMFA,
 };
