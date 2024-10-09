@@ -6,14 +6,12 @@ const middleware = (config) => (req, res, next) => {
   const { ignorePaths } = config || {};
   const { originalUrl } = req;
 
-  // Check if the current path should bypass authentication
   const isIgnoredPath = ignorePaths && ignorePaths.some((path) => originalUrl.startsWith(path));
 
   if (isIgnoredPath) {
     return next();
   }
 
-  // Check if the Authorization header is present
   if (!authorization || !authorization.startsWith('Bearer ')) {
     return res.status(401).json({
       error: 'Unauthorized',

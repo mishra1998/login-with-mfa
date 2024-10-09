@@ -1,21 +1,24 @@
 const express = require('express');
 const { Sequelize } = require('sequelize');
-const config = require('./config/config.json');
+const config = require('./config');
 const defaultRoutes = require('./routes/index');
 const { CUSTOMER_IGNORE_PATH, AUDIENCE_TYPE, ISSUER } = require('./utils/constant');
 const Authentication = require('./utils/middlewares/auth');
 
 const app = express();
-const port = 3002;
+const port = process.env.PORT || 3002;
 
 app.use(express.json());
 
-const environment = process.env.NODE_ENV || 'development';
-const dbConfig = config[environment];
-const sequelize = new Sequelize(dbConfig.database, dbConfig.username, dbConfig.password, {
-  host: dbConfig.host,
-  dialect: dbConfig.dialect,
-  port: dbConfig.port,
+const environment = process.env.NODE_ENV || 'test';
+const dbConfig = config.DATABASE[environment];
+const sequelize = new Sequelize(dbConfig.name, dbConfig.username, dbConfig.password, {
+  host: dbConfig.options.host,
+  dialect: dbConfig.options.dialect,
+  port: dbConfig.options.port,
+  pool: dbConfig.options.pool,
+  dialectOptions: dbConfig.options.dialectOptions,
+  logging: dbConfig.options.logging,
 });
 
 sequelize.authenticate()
@@ -32,9 +35,6 @@ app.use('/api', Authentication({
   ISSUER,
 }), defaultRoutes);
 
-// app.use('/api', defaultRoutes);
-
 app.listen(port, () => {
   console.log(`Server is running at http://localhost:${port}`);
 });
-

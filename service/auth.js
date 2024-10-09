@@ -318,6 +318,7 @@ const login = async (payload) => {
                 },
               };
             }
+
             if (delta === -1) {
               await transaction.rollback();
 
@@ -328,6 +329,7 @@ const login = async (payload) => {
                 },
               };
             }
+
             if (delta === 1) {
               await transaction.rollback();
 
@@ -352,6 +354,7 @@ const login = async (payload) => {
             doc: { token, expiresIn, refreshToken },
           };
         }
+
         await transaction.rollback();
 
         return {
@@ -360,6 +363,7 @@ const login = async (payload) => {
           },
         };
       }
+
       await transaction.rollback();
 
       return {
@@ -369,6 +373,7 @@ const login = async (payload) => {
         },
       };
     }
+
     await transaction.rollback();
 
     return {
