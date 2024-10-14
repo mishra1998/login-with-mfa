@@ -1,17 +1,18 @@
 const emailVerification = {
-  title: 'email verification form',
+  title: 'Email verification form',
   description: 'Defines the structure for HTTP POST request body',
   type: 'object',
   properties: {
     email: {
       type: 'string',
-      description: 'email of user',
+      description: 'Email of user',
       format: 'email',
+      pattern: '^[\\w.%+-]+@[\\w.-]+\\.[a-zA-Z]{2,}$',
     },
     otp: {
       type: 'string',
-      description: 'OTP, one time password sent on user email.',
-      pattern: '^[0-9]{6}',
+      description: 'OTP (One-Time Password) sent to the users email.',
+      pattern: '^[0-9]{6}$',
       maxLength: 6,
     },
   },

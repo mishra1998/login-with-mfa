@@ -18,6 +18,7 @@ dist/
 
 # Package files
 *.jar
+package-lock.json
 
 # Maven
 target/
@@ -52,6 +53,7 @@ Thumbs.db
 .nyc_output
 coverage
 .npmrc
+.vscode
 .env
 
 # Terraform files

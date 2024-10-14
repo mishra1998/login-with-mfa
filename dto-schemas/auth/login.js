@@ -4,18 +4,21 @@ const login = {
   properties: {
     email: {
       type: 'string',
-      description: 'email of user',
+      description: 'Email of user',
       format: 'email',
+      pattern: '^[\\w.%+-]+@[\\w.-]+\\.[a-zA-Z]{2,}$',
     },
     password: {
       type: 'string',
-      description: 'password',
+      description: 'Password',
       maxLength: 50,
+      pattern: '^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[#$^+=!*()@%&]).{8,15}$',
     },
     totp: {
       type: 'string',
-      description: 'totp',
+      description: 'TOTP (Time-based One-Time Password)',
       maxLength: 6,
+      pattern: '^[0-9]{6}$',
     },
   },
   required: [ 'email', 'password' ],

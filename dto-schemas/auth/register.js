@@ -5,8 +5,9 @@ const registration = {
   properties: {
     email: {
       type: 'string',
-      description: 'email of user',
+      description: 'Email of user',
       format: 'email',
+      pattern: '^[\\w.%+-]+@[\\w.-]+\\.[a-zA-Z]{2,}$',
     },
   },
   errorMessage: {
